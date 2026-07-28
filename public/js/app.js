@@ -7,17 +7,10 @@
 
   const api = window.NexusAPI;
 
-  const STAGES = [
-    { key: 'interessado', label: 'Interessado', color: '#38BDF8' },
-    { key: 'inscrito', label: 'Inscrito no Vestibular', color: '#8B5CF6' },
-    { key: 'vestibular', label: 'Vestibular Aprovado', color: '#F59E0B' },
-    { key: 'documentacao', label: 'Análise de Documentos', color: '#EC4899' },
-    { key: 'pagamento', label: 'Pagamento 1ª Mensalidade', color: '#10B981' },
-    { key: 'matricula', label: 'Matrícula Efetivada', color: '#0066B3' },
-    { key: 'ativo', label: 'Aluno Ativo', color: '#00A3E0' },
-    { key: 'trancado', label: 'Aluno Trancado', color: '#94A3B8' },
-    { key: 'formado', label: 'Aluno Formado', color: '#6E7A85' }
-  ];
+  // Stages (Jornada do Lead) are now fully dynamic and managed by the Gestor —
+  // see state.stagesCache, loaded from /api/stages at startup and refreshed
+  // after any create/edit/reorder/delete.
+  const STAGE_COLOR_OPTIONS = ['#38BDF8', '#8B5CF6', '#F59E0B', '#EC4899', '#10B981', '#0066B3', '#00A3E0', '#94A3B8', '#6E7A85', '#F43F5E'];
   const TEMPERATURES = [
     { key: 'quente', label: 'Quente', color: '#F43F5E' },
     { key: 'morno', label: 'Morno', color: '#F59E0B' },
@@ -35,6 +28,8 @@
     pipelinesTab: 'stage',
     leadsCache: [],
     coursesCache: [],
+    automationsCache: [],
+    stagesCache: [],
     usersCache: [],
     rolesCache: [],
     deptsCache: [],
@@ -46,7 +41,10 @@
     inboxChannelFilter: 'todos',
     selectedBroadcastListId: null,
     selectedTeamGroupId: null,
-    contactsFilters: { name: '', course: '', polo: '', stage: '', temperature: '' }
+    contactsFilters: { name: '', course: '', polo: '', stage: '', temperature: '' },
+    calendarTab: 'hoje',
+    calendarMembersCache: null,
+    calendarEventsCache: []
   };
 
   /* ---------------------------- helpers ---------------------------- */
@@ -74,7 +72,7 @@
     return `há ${days} dia(s)`;
   }
 
-  function stageLabel(key) { const s = STAGES.find(x => x.key === key); return s ? s.label : key; }
+  function stageLabel(key) { const s = state.stagesCache.find(x => x.key === key); return s ? s.label : key; }
   function tempInfo(key) { return TEMPERATURES.find(x => x.key === key) || { label: key, color: '#94A3B8' }; }
   function channelLabel(key) { return CHANNEL_LABELS[key] || key; }
 
@@ -239,6 +237,7 @@
     applySidebarPermissions();
     bindGlobalUI();
     refreshIcons();
+    await refreshStagesCache();
 
     const startModule = can('insights', 'view') ? 'insights' : (MODULE_ORDER.find(m => can(m, 'view')) || null);
     if (startModule) {
@@ -745,7 +744,7 @@
             <input type="text" id="ct-filter-name" placeholder="Buscar por nome...">
             <select id="ct-filter-course"><option value="">Todos os cursos</option>${uniqueCourses.map(c => `<option value="${esc(c)}">${esc(c)}</option>`).join('')}</select>
             <select id="ct-filter-polo"><option value="">Todos os polos</option>${uniquePolos.map(p => `<option value="${esc(p)}">${esc(p)}</option>`).join('')}</select>
-            <select id="ct-filter-stage"><option value="">Todas as etapas</option>${STAGES.map(s => `<option value="${s.key}">${esc(s.label)}</option>`).join('')}</select>
+            <select id="ct-filter-stage"><option value="">Todas as etapas</option>${state.stagesCache.map(s => `<option value="${s.key}">${esc(s.label)}</option>`).join('')}</select>
             <select id="ct-filter-temp"><option value="">Todas as temperaturas</option>${TEMPERATURES.map(t => `<option value="${t.key}">${esc(t.label)}</option>`).join('')}</select>
           </div>
           <div style="display:flex; gap:8px; flex-wrap:wrap;">
@@ -1075,6 +1074,7 @@
   async function renderPipelines(container) {
     const { leads } = await api.get('/leads');
     state.leadsCache = leads;
+    await refreshStagesCache();
 
     container.innerHTML = `
       <div class="page-header">
@@ -1082,7 +1082,10 @@
           <h2>Jornada do Lead</h2>
           <p>Arraste os cards para mover leads entre etapas ou reclassificar manualmente a temperatura</p>
         </div>
-        ${can('pipelines', 'create') ? `<button class="btn btn-primary" data-action="lead-new"><i data-feather="plus"></i> Novo Lead</button>` : ''}
+        <div class="header-actions">
+          ${state.pipelinesTab === 'stage' && state.user.isGestor ? `<button class="btn btn-secondary" data-action="stage-manager-open"><i data-feather="sliders"></i> Gerenciar Etapas</button>` : ''}
+          ${can('pipelines', 'create') ? `<button class="btn btn-primary" data-action="lead-new"><i data-feather="plus"></i> Novo Lead</button>` : ''}
+        </div>
       </div>
       <div class="tabs-bar">
         <button class="tab-btn ${state.pipelinesTab === 'stage' ? 'active' : ''}" data-action="pipelines-tab" data-id="stage">Jornada do Lead</button>
@@ -1095,9 +1098,73 @@
     refreshIcons();
   }
 
+  async function refreshStagesCache() {
+    try { state.stagesCache = (await api.get('/stages')).stages; } catch { /* keep previous cache */ }
+  }
+
+  function openStageManagerModal() {
+    openFormModal({
+      title: 'Gerenciar Etapas da Jornada do Lead',
+      submitLabel: 'Adicionar Etapa',
+      fields: [
+        { name: 'label', label: 'Nome da nova etapa', required: true, placeholder: 'Ex: Bolsa Aprovada' },
+        { name: 'color', label: 'Cor', type: 'select', options: STAGE_COLOR_OPTIONS.map(c => ({ value: c, label: c })) }
+      ],
+      extraHtml: `<div class="form-hint" style="margin-bottom:8px;">As etapas abaixo já existem. Renomeie, mude a cor, reordene ou exclua (só é possível excluir uma etapa sem leads nela).</div><div id="stage-manager-list" class="stage-manager-list"></div>`,
+      onSubmit: async (values) => {
+        await api.post('/stages', values);
+        await refreshStagesCache();
+        showToast('Etapa criada.', 'success');
+        if (state.currentModule === 'pipelines') await switchModule('pipelines');
+      }
+    });
+    renderStageManagerList();
+  }
+
+  function renderStageManagerList() {
+    const holder = document.getElementById('stage-manager-list');
+    if (!holder) return;
+    holder.innerHTML = state.stagesCache.map((s, idx) => `
+      <div class="stage-manager-row">
+        <span class="stage-color-dot" style="background:${s.color}"></span>
+        <input type="text" class="stage-label-input" data-stage-id="${s.id}" value="${esc(s.label)}">
+        <select class="stage-color-select" data-stage-id="${s.id}">
+          ${STAGE_COLOR_OPTIONS.map(c => `<option value="${c}" ${c === s.color ? 'selected' : ''}>${c === s.color ? '● cor atual' : '●'}</option>`).join('')}
+        </select>
+        <div class="stage-row-actions">
+          <i class="icon-action ${idx === 0 ? 'icon-action-disabled' : ''}" data-feather="arrow-up" data-action="stage-move-up" data-id="${s.id}"></i>
+          <i class="icon-action ${idx === state.stagesCache.length - 1 ? 'icon-action-disabled' : ''}" data-feather="arrow-down" data-action="stage-move-down" data-id="${s.id}"></i>
+          <i class="icon-action danger" data-feather="trash-2" data-action="stage-delete" data-id="${s.id}"></i>
+        </div>
+      </div>
+    `).join('');
+
+    holder.querySelectorAll('.stage-label-input').forEach(inp => {
+      inp.addEventListener('change', async () => {
+        try {
+          await api.put(`/stages/${inp.getAttribute('data-stage-id')}`, { label: inp.value });
+          await refreshStagesCache();
+          showToast('Etapa renomeada.', 'success');
+          if (state.currentModule === 'pipelines') renderKanbanBoard();
+        } catch (err) { showToast(err.message, 'error'); }
+      });
+    });
+    holder.querySelectorAll('.stage-color-select').forEach(sel => {
+      sel.addEventListener('change', async () => {
+        try {
+          await api.put(`/stages/${sel.getAttribute('data-stage-id')}`, { color: sel.value });
+          await refreshStagesCache();
+          renderStageManagerList();
+          if (state.currentModule === 'pipelines') renderKanbanBoard();
+        } catch (err) { showToast(err.message, 'error'); }
+      });
+    });
+    refreshIcons();
+  }
+
   function renderKanbanBoard() {
     const board = document.getElementById('kanban-board');
-    const columns = state.pipelinesTab === 'stage' ? STAGES : TEMPERATURES;
+    const columns = state.pipelinesTab === 'stage' ? state.stagesCache : TEMPERATURES;
     const groupKey = state.pipelinesTab === 'stage' ? 'stage' : 'temperature';
 
     board.innerHTML = columns.map(col => {
@@ -1251,24 +1318,35 @@
   }
 
   /* ==========================================================================
-     MODULE: CALENDÁRIO
+     MODULE: CALENDÁRIO (Hoje / Agenda Completa + compartilhamento)
      ========================================================================== */
+  function isToday(iso) {
+    if (!iso) return false;
+    const d = new Date(iso);
+    const now = new Date();
+    return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth() && d.getDate() === now.getDate();
+  }
+
   async function renderCalendario(container) {
+    if (!state.calendarTab) state.calendarTab = 'hoje';
     let members = [];
-    if (state.user.isGestor) {
-      try { members = (await api.get('/calendar/team-members')).members; } catch { /* ignore */ }
-    }
+    try { members = (await api.get('/calendar/team-members')).members; } catch { /* ignore */ }
+    state.calendarMembersCache = members;
+
     const filterValue = container.dataset.calFilter || 'all';
     const { events } = await api.get(`/calendar${state.user.isGestor ? '?ownerUserId=' + filterValue : ''}`);
+    state.calendarEventsCache = events;
+
+    const todayEvents = events.filter(evt => isToday(evt.startsAt) && (state.user.isGestor || evt.isOwner));
 
     container.innerHTML = `
       <div class="page-header">
         <div class="page-title-group">
           <h2>Calendário Acadêmico ${state.user.isGestor ? '(Visão do Gestor)' : '(Agenda Privada)'}</h2>
-          <p>${state.user.isGestor ? 'Visualize os compromissos de toda a equipe ou filtre por colaborador' : 'Seus compromissos privados — outros colaboradores não podem vê-los'}</p>
+          <p>${state.user.isGestor ? 'Visualize os compromissos de toda a equipe ou filtre por colaborador' : 'Seus compromissos privados — outros colaboradores só veem o que você compartilhar'}</p>
         </div>
         <div class="header-actions">
-          ${state.user.isGestor ? `
+          ${state.calendarTab === 'agenda' && state.user.isGestor ? `
             <select class="btn btn-secondary" id="cal-filter-select">
               <option value="all" ${filterValue === 'all' ? 'selected' : ''}>Todos os Colaboradores</option>
               ${members.map(m => `<option value="${m.id}" ${String(filterValue) === String(m.id) ? 'selected' : ''}>${esc(m.name)}</option>`).join('')}
@@ -1276,13 +1354,23 @@
           ${can('calendario', 'create') ? `<button class="btn btn-primary" data-action="event-new"><i data-feather="plus"></i> Novo Evento</button>` : ''}
         </div>
       </div>
+      <div class="tabs-bar">
+        <button class="tab-btn ${state.calendarTab === 'hoje' ? 'active' : ''}" data-cal-tab="hoje">Hoje</button>
+        <button class="tab-btn ${state.calendarTab === 'agenda' ? 'active' : ''}" data-cal-tab="agenda">Agenda Completa</button>
+      </div>
       <div class="chart-card">
-        <div class="chart-header"><h4>Próximos Compromissos</h4></div>
+        <div class="chart-header"><h4>${state.calendarTab === 'hoje' ? 'Compromissos de Hoje' : 'Próximos Compromissos'}</h4></div>
         <div style="display:grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap:14px;">
-          ${events.length ? events.map(evt => calendarCardHtml(evt)).join('') : `<p style="font-size:0.82rem;color:var(--text-muted)">Nenhum evento agendado.</p>`}
+          ${(state.calendarTab === 'hoje' ? todayEvents : events).length
+            ? (state.calendarTab === 'hoje' ? todayEvents : events).map(evt => calendarCardHtml(evt)).join('')
+            : `<p style="font-size:0.82rem;color:var(--text-muted)">${state.calendarTab === 'hoje' ? 'Nenhum compromisso seu para hoje.' : 'Nenhum evento agendado.'}</p>`}
         </div>
       </div>
     `;
+
+    container.querySelectorAll('[data-cal-tab]').forEach(btn => {
+      btn.addEventListener('click', () => { state.calendarTab = btn.getAttribute('data-cal-tab'); renderCalendario(container); });
+    });
 
     const filterSelect = document.getElementById('cal-filter-select');
     if (filterSelect) {
@@ -1295,16 +1383,20 @@
   }
 
   function calendarCardHtml(evt) {
+    const canManage = evt.isOwner || state.user.isGestor;
     return `
       <div style="background:var(--bg-app); border:1px solid var(--border-color); border-radius:10px; padding:14px; display:flex; flex-direction:column; gap:8px;">
         <span style="font-size:0.7rem; font-weight:700; color:var(--uc-cyan-accent)">${fmtDateTime(evt.startsAt)}</span>
         <span style="font-weight:700; font-size:0.85rem">${esc(evt.title)}</span>
         <span style="font-size:0.72rem; color:var(--text-sub)">Tipo: ${esc(evt.type)} ${evt.ownerName ? '· ' + esc(evt.ownerName) : ''}</span>
         ${evt.isPrivate ? '<span style="font-size:0.65rem; color:var(--accent-warning); font-weight:700">🔒 Privado</span>' : ''}
+        ${!evt.isOwner ? `<span style="font-size:0.65rem; color:var(--accent-ai); font-weight:700">🔗 Compartilhado por ${esc(evt.ownerName || '')}</span>` : ''}
+        ${evt.isOwner && evt.sharedWith && evt.sharedWith.length ? `<span style="font-size:0.65rem; color:var(--text-muted);">Compartilhado com: ${evt.sharedWith.map(s => esc(s.name)).join(', ')}</span>` : ''}
+        ${canManage ? `
         <div style="display:flex; gap:10px; margin-top:4px;">
           ${can('calendario', 'edit') ? `<i class="icon-action" data-feather="edit-2" data-action="event-edit" data-id="${evt.id}"></i>` : ''}
           ${can('calendario', 'delete') ? `<i class="icon-action danger" data-feather="trash-2" data-action="event-delete" data-id="${evt.id}"></i>` : ''}
-        </div>
+        </div>` : ''}
       </div>
     `;
   }
@@ -1316,7 +1408,13 @@
     return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
   }
 
-  function openEventFormModal(existingEvent) {
+  async function openEventFormModal(existingEvent) {
+    let members = state.calendarMembersCache;
+    if (!members) {
+      try { members = (await api.get('/calendar/team-members')).members; } catch { members = []; }
+    }
+    const alreadySharedIds = new Set((existingEvent && existingEvent.sharedWith || []).map(s => s.id));
+
     openFormModal({
       title: existingEvent ? 'Editar Evento' : 'Novo Evento Acadêmico',
       submitLabel: existingEvent ? 'Salvar Alterações' : 'Criar Evento',
@@ -1326,14 +1424,25 @@
         { name: 'startsAt', label: 'Data e Hora', type: 'datetime-local', required: true, value: existingEvent ? toDatetimeLocal(existingEvent.startsAt) : '' },
         { name: 'isPrivate', label: 'Evento privado (apenas eu e o Gestor podem ver)', type: 'checkbox', value: existingEvent ? existingEvent.isPrivate : true }
       ],
-      onSubmit: async (values) => {
-        const payload = { title: values.title, type: values.type, startsAt: new Date(values.startsAt).toISOString(), isPrivate: !!values.isPrivate };
+      extraHtml: members.length ? `
+        <div class="form-group">
+          <label><i data-feather="share-2" style="width:14px;height:14px;vertical-align:-2px;"></i> Compartilhar com</label>
+          <span class="form-hint">Marque quem mais pode ver este compromisso. O Gestor/Admin sempre vê tudo.</span>
+          <div style="display:flex;flex-direction:column;gap:6px;max-height:160px;overflow-y:auto;margin-top:6px;">
+            ${members.map(m => `<div class="checkbox-row"><input type="checkbox" name="share-${m.id}" id="share-${m.id}" ${alreadySharedIds.has(m.id) ? 'checked' : ''}><label for="share-${m.id}">${esc(m.name)}</label></div>`).join('')}
+          </div>
+        </div>
+      ` : '',
+      onSubmit: async (values, overlay) => {
+        const sharedWithUserIds = members.filter(m => overlay.querySelector(`[name="share-${m.id}"]`) && overlay.querySelector(`[name="share-${m.id}"]`).checked).map(m => m.id);
+        const payload = { title: values.title, type: values.type, startsAt: new Date(values.startsAt).toISOString(), isPrivate: !!values.isPrivate, sharedWithUserIds };
         if (existingEvent) await api.put(`/calendar/${existingEvent.id}`, payload);
         else await api.post('/calendar', payload);
         showToast(existingEvent ? 'Evento atualizado.' : 'Evento criado.', 'success');
         await switchModule('calendario');
       }
     });
+    refreshIcons();
   }
 
   /* ==========================================================================
@@ -1553,6 +1662,7 @@
 
   async function renderAutomacoes(container) {
     const { automations } = await api.get('/automations');
+    state.automationsCache = automations;
     container.innerHTML = `
       <div class="page-header">
         <div class="page-title-group">
@@ -1584,6 +1694,7 @@
                   <td style="font-size:0.78rem;">${a.lastRunAt ? fmtRelative(a.lastRunAt) : 'nunca'}</td>
                   <td class="row-actions">
                     ${can('automacoes', 'edit') ? `<button class="btn btn-secondary btn-sm" data-action="automation-run" data-id="${a.id}" ${a.active ? '' : 'disabled'}>Executar agora</button>` : ''}
+                    ${can('automacoes', 'edit') ? `<i class="icon-action" data-feather="edit-2" data-action="automation-edit" data-id="${a.id}"></i>` : ''}
                     ${can('automacoes', 'delete') ? `<i class="icon-action danger" data-feather="trash-2" data-action="automation-delete" data-id="${a.id}"></i>` : ''}
                   </td>
                 </tr>
@@ -1616,18 +1727,19 @@
     refreshIcons();
   }
 
-  function openAutomationFormModal() {
+  function openAutomationFormModal(existingAutomation) {
     openFormModal({
-      title: 'Criar Automação',
-      submitLabel: 'Criar',
+      title: existingAutomation ? 'Editar Automação' : 'Criar Automação',
+      submitLabel: existingAutomation ? 'Salvar Alterações' : 'Criar',
       fields: [
-        { name: 'name', label: 'Nome', required: true },
-        { name: 'description', label: 'Descrição', type: 'textarea' },
-        { name: 'triggerDesc', label: 'Gatilho', placeholder: 'Ex: D-3 antes do vencimento' }
+        { name: 'name', label: 'Nome', required: true, value: existingAutomation && existingAutomation.name },
+        { name: 'description', label: 'Descrição', type: 'textarea', value: existingAutomation && existingAutomation.description },
+        { name: 'triggerDesc', label: 'Gatilho', placeholder: 'Ex: D-3 antes do vencimento', value: existingAutomation && existingAutomation.triggerDesc }
       ],
       onSubmit: async (values) => {
-        await api.post('/automations', values);
-        showToast('Automação criada.', 'success');
+        if (existingAutomation) await api.put(`/automations/${existingAutomation.id}`, values);
+        else await api.post('/automations', values);
+        showToast(existingAutomation ? 'Automação atualizada.' : 'Automação criada.', 'success');
         await switchModule('automacoes');
       }
     });
@@ -2114,11 +2226,29 @@
           await renderPipelines(document.getElementById('main-content'));
           break;
 
-        case 'event-new': openEventFormModal(null); break;
+        case 'stage-manager-open': openStageManagerModal(); break;
+        case 'stage-move-up':
+        case 'stage-move-down':
+          await api.post(`/stages/${id}/move`, { direction: action === 'stage-move-up' ? 'up' : 'down' });
+          await refreshStagesCache();
+          renderStageManagerList();
+          if (state.currentModule === 'pipelines') renderKanbanBoard();
+          break;
+        case 'stage-delete':
+          if (confirmAction('Excluir esta etapa? Só é possível se nenhum lead estiver nela no momento.')) {
+            await api.del(`/stages/${id}`);
+            await refreshStagesCache();
+            renderStageManagerList();
+            showToast('Etapa excluída.', 'success');
+            if (state.currentModule === 'pipelines') renderKanbanBoard();
+          }
+          break;
+
+        case 'event-new': await openEventFormModal(null); break;
         case 'event-edit': {
           const { events } = await api.get('/calendar');
           const evt = events.find(x => x.id === Number(id));
-          openEventFormModal(evt);
+          await openEventFormModal(evt);
           break;
         }
         case 'event-delete':
@@ -2152,6 +2282,7 @@
           break;
 
         case 'automation-new': openAutomationFormModal(); break;
+        case 'automation-edit': openAutomationFormModal((state.automationsCache || []).find(a => a.id === Number(id))); break;
         case 'automation-toggle': await api.patch(`/automations/${id}/toggle`); await switchModule('automacoes'); break;
         case 'automation-run':
           await api.post(`/automations/${id}/run`);

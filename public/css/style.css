@@ -606,6 +606,17 @@ a { color: inherit; }
 .automation-template-chat-preview .message-bubble { font-size: 0.78rem; }
 
 /* ==========================================================================
+   GERENCIADOR DE ETAPAS (Jornada do Lead)
+   ========================================================================== */
+.stage-manager-list { display: flex; flex-direction: column; gap: 8px; max-height: 320px; overflow-y: auto; }
+.stage-manager-row { display: flex; align-items: center; gap: 8px; padding: 8px; background: var(--bg-app); border: 1px solid var(--border-color); border-radius: var(--radius-md); }
+.stage-color-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+.stage-label-input { flex: 1; background: var(--bg-input); border: 1px solid var(--border-color); border-radius: var(--radius-sm); padding: 6px 10px; font-size: 0.8rem; }
+.stage-color-select { background: var(--bg-input); border: 1px solid var(--border-color); border-radius: var(--radius-sm); padding: 6px; font-size: 0.9rem; width: 68px; }
+.stage-row-actions { display: flex; gap: 8px; flex-shrink: 0; }
+.icon-action-disabled { opacity: 0.25; pointer-events: none; }
+
+/* ==========================================================================
    PROMOÇÃO DE CURSOS
    ========================================================================== */
 .promo-price-badge { background: rgba(16,185,129,0.15); color: var(--accent-success); font-weight: 800; padding: 3px 10px; border-radius: var(--radius-full); font-size: 0.85rem; }
