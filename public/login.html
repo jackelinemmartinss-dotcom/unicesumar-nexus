@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="pt-BR" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Entrar | UniCesumar Nexus</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <script src="https://unpkg.com/feather-icons"></script>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <div class="login-page">
+    <div class="login-card">
+      <div class="login-logo-row">
+        <div class="brand-emblem">
+          <svg viewBox="0 0 100 100" class="unicesumar-svg-logo">
+            <path d="M20,25 C20,65 35,85 50,85 C65,85 80,65 80,25 C72,25 66,35 66,55 C66,70 58,74 50,74 C42,74 34,70 34,55 C34,35 28,25 20,25 Z" fill="url(#ucGradBlue)" />
+            <path d="M35,30 C35,60 42,70 50,70 C58,70 65,60 65,30 C72,30 76,40 76,55 C76,75 64,80 50,80 C36,80 24,75 24,55 C24,40 28,30 35,30 Z" fill="url(#ucGradSilver)" opacity="0.85" />
+            <circle cx="50" cy="42" r="11" fill="url(#ucSphere)" />
+            <defs>
+              <linearGradient id="ucGradBlue" x1="0%" y1="0%" x2="100%" y2="100%">
+                <stop offset="0%" stop-color="#0080FF" /><stop offset="100%" stop-color="#004B93" />
+              </linearGradient>
+              <linearGradient id="ucGradSilver" x1="0%" y1="0%" x2="100%" y2="100%">
+                <stop offset="0%" stop-color="#A0AEC0" /><stop offset="100%" stop-color="#4A5568" />
+              </linearGradient>
+              <radialGradient id="ucSphere" cx="35%" cy="35%" r="65%">
+                <stop offset="0%" stop-color="#38BDF8" /><stop offset="60%" stop-color="#0066B3" /><stop offset="100%" stop-color="#002E5B" />
+              </radialGradient>
+            </defs>
+          </svg>
+        </div>
+        <span class="brand-title">UniCesumar <span class="brand-badge-nexus">NEXUS</span></span>
+        <span class="brand-subtitle">SUÍTE DE OPERAÇÕES ACADÊMICAS ENTERPRISE</span>
+      </div>
+
+      <form class="login-form" id="login-form">
+        <div id="login-error" class="form-error" style="display:none;"></div>
+        <div class="form-group">
+          <label for="username">Usuário</label>
+          <input type="text" id="username" name="username" placeholder="ex: clodoaldo" autocomplete="username" required>
+        </div>
+        <div class="form-group">
+          <label for="password">Senha</label>
+          <input type="password" id="password" name="password" placeholder="••••••••" autocomplete="current-password" required>
+        </div>
+        <button type="submit" class="btn btn-primary btn-block" id="login-submit-btn">
+          <i data-feather="log-in"></i> Entrar na Plataforma
+        </button>
+      </form>
+
+      <div class="login-demo-accounts">
+        <h6>Contas de demonstração (ambiente de avaliação)</h6>
+        <div class="demo-account-btn" data-user="clodoaldo" data-pass="Gestor@123">
+          <span>Clodoaldo</span><span class="role-tag">Gestor / Admin</span>
+        </div>
+        <div class="demo-account-btn" data-user="lucas.silva" data-pass="Colab@123">
+          <span>Lucas Silva</span><span class="role-tag">Colaborador Admissões</span>
+        </div>
+        <div class="demo-account-btn" data-user="camila.torres" data-pass="Tutor@123">
+          <span>Profa. Camila Torres</span><span class="role-tag">Tutor EAD</span>
+        </div>
+      </div>
+
+      <p class="login-footer-note">© UniCesumar Nexus — Ambiente de demonstração local</p>
+    </div>
+  </div>
+
+  <script src="js/api.js"></script>
+  <script>
+    (async function () {
+      // If already logged in, skip straight to the app.
+      try {
+        await window.NexusAPI.get('/auth/me');
+        location.href = '/index.html';
+        return;
+      } catch (_) { /* not logged in, stay on this page */ }
+
+      if (window.feather) window.feather.replace();
+
+      document.querySelectorAll('.demo-account-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          document.getElementById('username').value = btn.getAttribute('data-user');
+          document.getElementById('password').value = btn.getAttribute('data-pass');
+        });
+      });
+
+      const form = document.getElementById('login-form');
+      const errorBox = document.getElementById('login-error');
+      const submitBtn = document.getElementById('login-submit-btn');
+
+      form.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        errorBox.style.display = 'none';
+        submitBtn.disabled = true;
+        submitBtn.innerHTML = '<span class="loading-spinner"></span> Entrando...';
+
+        const username = document.getElementById('username').value.trim();
+        const password = document.getElementById('password').value;
+
+        try {
+          const res = await fetch('/api/auth/login', {
+            method: 'POST',
+            credentials: 'include',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ username, password })
+          });
+          const data = await res.json();
+          if (!res.ok) throw new Error(data.error || 'Falha no login.');
+          location.href = '/index.html';
+        } catch (err) {
+          errorBox.textContent = err.message;
+          errorBox.style.display = 'block';
+          submitBtn.disabled = false;
+          submitBtn.innerHTML = '<i data-feather="log-in"></i> Entrar na Plataforma';
+          if (window.feather) window.feather.replace();
+        }
+      });
+    })();
+  </script>
+</body>
+</html>
