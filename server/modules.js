@@ -3,18 +3,18 @@
 // Master list of application modules used for permission resolution.
 // Order here defines default sidebar order on the front-end.
 const MODULES = [
-  { key: 'insights', label: 'Insights Executivos' },
+  { key: 'insights', label: 'Dashboard' },
   { key: 'comunicacoes', label: 'Comunicações' },
-  { key: 'pipelines', label: 'Jornada do Aluno & Funil de Leads' },
+  { key: 'pipelines', label: 'Jornada do Lead' },
   { key: 'calendario', label: 'Calendário Acadêmico' },
-  { key: 'cursos', label: 'Cursos & Disciplinas' },
-  { key: 'listas', label: 'Diretório & Listas' },
-  { key: 'segmentos', label: 'Segmentos & Transmissões' },
+  { key: 'cursos', label: 'Cursos e Disciplinas' },
+  { key: 'listas', label: 'Diretório e Listas' },
+  { key: 'segmentos', label: 'Segmentos e Transmissões' },
   { key: 'agente-ia', label: 'Assistente Nexus AI' },
-  { key: 'automacoes', label: 'Automações & Bots' },
+  { key: 'automacoes', label: 'Automações e Bots' },
   { key: 'relatorios', label: 'Central de Relatórios' },
   { key: 'integracoes', label: 'Hub de Integrações' },
-  { key: 'configuracoes', label: 'Configurações & Permissões' }
+  { key: 'configuracoes', label: 'Configurações e Permissões' }
 ];
 
 const MODULE_KEYS = MODULES.map(m => m.key);

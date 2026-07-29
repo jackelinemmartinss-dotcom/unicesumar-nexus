@@ -18,6 +18,7 @@ const insightsRoutes = require('./routes/insights.routes');
 const auditRoutes = require('./routes/audit.routes');
 const teamchatRoutes = require('./routes/teamchat.routes');
 const stagesRoutes = require('./routes/stages.routes');
+const webhooksRoutes = require('./routes/webhooks.routes');
 
 const app = express();
 const PORT = process.env.PORT || 4000;
@@ -38,6 +39,8 @@ app.use(session({
 }));
 
 // ---------- API ----------
+// Public webhook receiver — secured by a per-integration token in the URL, not by session.
+app.use('/api/webhooks', webhooksRoutes);
 app.use('/api/auth', authRouter);
 app.use('/api/users', requireAuth, usersRoutes);
 app.use('/api/leads', requireAuth, leadsRoutes);

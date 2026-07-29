@@ -1,12 +1,24 @@
 'use strict';
 
 const express = require('express');
+const crypto = require('crypto');
 const db = require('../db');
 const { requirePermission } = require('../permissions');
 const { logAction } = require('../audit');
 const { rescanLead } = require('./leads.routes');
 
 const router = express.Router();
+
+function getMeta(integration) {
+  try { return integration.meta ? JSON.parse(integration.meta) : {}; } catch { return {}; }
+}
+function saveMeta(key, meta) {
+  db.prepare('UPDATE integrations SET meta = ? WHERE key = ?').run(JSON.stringify(meta), key);
+}
+function maskSecret(value) {
+  if (!value) return null;
+  return value.length <= 4 ? '••••' : `••••${value.slice(-4)}`;
+}
 
 const INTEGRATION_LABELS = {
   instagram: 'Instagram',
@@ -17,18 +29,21 @@ const INTEGRATION_LABELS = {
 
 const SAMPLE_FIRST_NAMES = ['Mariana', 'Pedro', 'Isabela', 'Lucas', 'Fernanda', 'Bruno', 'Carolina', 'Diego', 'Sofia', 'Rodrigo', 'Aline', 'Felipe'];
 const SAMPLE_LAST_NAMES = ['Ferreira', 'Souza', 'Carvalho', 'Ribeiro', 'Barbosa', 'Nogueira', 'Teixeira', 'Correia', 'Pinto', 'Moura'];
-const SAMPLE_COURSES = ['Engenharia de Software', 'Medicina', 'Administração de Empresas', 'MBA em Inteligência Artificial & Data Science', 'Pedagogia'];
+const SAMPLE_COURSES = ['Engenharia de Software', 'Medicina', 'Administração de Empresas', 'MBA em Inteligência Artificial e Data Science', 'Pedagogia'];
 const SAMPLE_MESSAGES_PAGO = ['Vi o anúncio de vocês, quero saber mais sobre bolsas!', 'Qual o valor da primeira parcela?', 'Ainda dá tempo de me inscrever essa semana?'];
 const SAMPLE_MESSAGES_ORGANICO = ['Uma amiga minha estuda aí, quero informações do curso.', 'Gostaria de saber a grade curricular completa.', 'Vocês têm aulas aos sábados?'];
 
 function serialize(i) {
+  const meta = getMeta(i);
   return {
     id: i.id,
     key: i.key,
     label: INTEGRATION_LABELS[i.key] || i.key,
     status: i.status,
     connectedAt: i.connected_at,
-    meta: i.meta ? JSON.parse(i.meta) : {}
+    autoReply: !!meta.autoReply,
+    apiKeyMasked: maskSecret(meta.apiKey),
+    webhookUrl: meta.webhookToken ? `/api/webhooks/${i.key}/${meta.webhookToken}` : null
   };
 }
 
@@ -40,9 +55,37 @@ router.get('/', requirePermission('integracoes', 'view'), (req, res) => {
 router.post('/:key/connect', requirePermission('integracoes', 'edit'), (req, res) => {
   const integration = db.prepare('SELECT * FROM integrations WHERE key = ?').get(req.params.key);
   if (!integration) return res.status(404).json({ error: 'Integração não encontrada.' });
+  const meta = getMeta(integration);
+  if (!meta.webhookToken) meta.webhookToken = crypto.randomBytes(10).toString('hex');
+  saveMeta(req.params.key, meta);
   db.prepare('UPDATE integrations SET status = ?, connected_at = ? WHERE key = ?').run('connected', new Date().toISOString(), req.params.key);
   logAction(req.session.userId, 'update', 'integration', req.params.key, `Integração conectada: ${req.params.key}`);
   res.json({ integration: serialize(db.prepare('SELECT * FROM integrations WHERE key = ?').get(req.params.key)) });
+});
+
+// Persists simulated API credentials / auto-reply preference for this integration.
+router.put('/:key/config', requirePermission('integracoes', 'edit'), (req, res) => {
+  const integration = db.prepare('SELECT * FROM integrations WHERE key = ?').get(req.params.key);
+  if (!integration) return res.status(404).json({ error: 'Integração não encontrada.' });
+  const meta = getMeta(integration);
+  const { apiKey, autoReply } = req.body || {};
+  if (apiKey !== undefined) meta.apiKey = apiKey || null;
+  if (autoReply !== undefined) meta.autoReply = !!autoReply;
+  saveMeta(req.params.key, meta);
+  logAction(req.session.userId, 'update', 'integration', req.params.key, `Configuração atualizada: ${req.params.key}`);
+  res.json({ integration: serialize(db.prepare('SELECT * FROM integrations WHERE key = ?').get(req.params.key)) });
+});
+
+// Simulated connectivity check — no real external call is made in this environment.
+router.post('/:key/test', requirePermission('integracoes', 'view'), (req, res) => {
+  const integration = db.prepare('SELECT * FROM integrations WHERE key = ?').get(req.params.key);
+  if (!integration) return res.status(404).json({ error: 'Integração não encontrada.' });
+  if (integration.status !== 'connected') {
+    return res.status(400).json({ error: 'Conecte a integração antes de testar.' });
+  }
+  const latencyMs = 120 + Math.floor(Math.random() * 260);
+  logAction(req.session.userId, 'test', 'integration', req.params.key, `Teste de conexão executado: ${req.params.key} (${latencyMs}ms)`);
+  res.json({ ok: true, latencyMs });
 });
 
 router.post('/:key/disconnect', requirePermission('integracoes', 'edit'), (req, res) => {

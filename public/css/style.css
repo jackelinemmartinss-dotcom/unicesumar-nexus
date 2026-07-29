@@ -517,7 +517,6 @@ a { color: inherit; }
 .temp-badge.morno { background: rgba(245, 158, 11, 0.15); color: var(--accent-warning); }
 .temp-badge.frio { background: rgba(56, 189, 248, 0.15); color: #38BDF8; }
 
-.channel-chip { font-size: 0.65rem; font-weight: 600; color: var(--text-muted); display: flex; align-items: center; gap: 4px; }
 
 .student-name { font-size: 0.9rem; font-weight: 700; }
 .student-info { font-size: 0.78rem; color: var(--text-sub); }
@@ -536,6 +535,9 @@ a { color: inherit; }
 
 .chat-main-panel { display: flex; flex-direction: column; justify-content: space-between; min-width: 0; }
 .chat-conversation-header { padding: 16px 24px; border-bottom: 1px solid var(--border-color); display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; }
+/* Only shown on mobile (see @media 768px) when a conversation/list/group is open. */
+.chat-back-btn { display: none; align-items: center; gap: 6px; background: transparent; border: none; padding: 14px 16px 0 16px; color: var(--uc-cyan-accent); font-weight: 700; font-size: 0.82rem; cursor: pointer; }
+.chat-back-btn i { width: 16px; height: 16px; }
 .chat-messages-container { padding: 24px; overflow-y: auto; display: flex; flex-direction: column; gap: 16px; flex: 1; }
 
 .message-bubble { max-width: 70%; padding: 12px 16px; border-radius: var(--radius-lg); font-size: 0.85rem; line-height: 1.4; }
@@ -544,7 +546,8 @@ a { color: inherit; }
 .message-bubble.system { align-self: center; background: transparent; color: var(--text-muted); font-size: 0.72rem; font-style: italic; }
 
 .chat-input-bar { padding: 16px 24px; border-top: 1px solid var(--border-color); display: flex; gap: 12px; }
-.chat-input-bar input { flex: 1; background: var(--bg-input); border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 12px 16px; }
+.chat-input-bar input { flex: 1; min-width: 0; background: var(--bg-input); border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 12px 16px; }
+.chat-input-bar .btn { flex-shrink: 0; }
 
 .chat-student-sidebar { border-left: 1px solid var(--border-color); padding: 20px; display: flex; flex-direction: column; gap: 16px; background: var(--bg-app); overflow-y: auto; }
 .chat-student-sidebar h6 { font-size: 0.72rem; text-transform: uppercase; color: var(--text-muted); letter-spacing: 0.05em; }
@@ -606,12 +609,19 @@ a { color: inherit; }
 .automation-template-chat-preview .message-bubble { font-size: 0.78rem; }
 
 /* ==========================================================================
+   SELO DE ORIGEM (canal + anúncio) ao lado do nome do lead/contato
+   ========================================================================== */
+.source-inline { display: inline-flex; align-items: center; gap: 4px; vertical-align: middle; }
+.source-icon { width: 13px; height: 13px; color: var(--text-muted); stroke-width: 2.2px; }
+.ad-tag { font-size: 0.6rem; font-weight: 800; color: var(--accent-warning); background: rgba(245, 158, 11, 0.15); padding: 1px 6px; border-radius: var(--radius-full); text-transform: uppercase; letter-spacing: 0.02em; }
+
+/* ==========================================================================
    GERENCIADOR DE ETAPAS (Jornada do Lead)
    ========================================================================== */
 .stage-manager-list { display: flex; flex-direction: column; gap: 8px; max-height: 320px; overflow-y: auto; }
-.stage-manager-row { display: flex; align-items: center; gap: 8px; padding: 8px; background: var(--bg-app); border: 1px solid var(--border-color); border-radius: var(--radius-md); }
+.stage-manager-row { display: flex; align-items: center; gap: 8px; padding: 8px; background: var(--bg-app); border: 1px solid var(--border-color); border-radius: var(--radius-md); flex-wrap: wrap; }
 .stage-color-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
-.stage-label-input { flex: 1; background: var(--bg-input); border: 1px solid var(--border-color); border-radius: var(--radius-sm); padding: 6px 10px; font-size: 0.8rem; }
+.stage-label-input { flex: 1 1 120px; min-width: 90px; background: var(--bg-input); border: 1px solid var(--border-color); border-radius: var(--radius-sm); padding: 6px 10px; font-size: 0.8rem; }
 .stage-color-select { background: var(--bg-input); border: 1px solid var(--border-color); border-radius: var(--radius-sm); padding: 6px; font-size: 0.9rem; width: 68px; }
 .stage-row-actions { display: flex; gap: 8px; flex-shrink: 0; }
 .icon-action-disabled { opacity: 0.25; pointer-events: none; }
@@ -799,7 +809,7 @@ a { color: inherit; }
 @media (max-width: 1024px) {
   .charts-grid, .ai-console-wrapper { grid-template-columns: 1fr; }
   .chat-layout { grid-template-columns: 1fr; height: auto; }
-  .chat-threads-list { max-height: 220px; border-right: none; border-bottom: 1px solid var(--border-color); }
+  .chat-threads-list { max-height: 320px; border-right: none; border-bottom: 1px solid var(--border-color); }
   .chat-student-sidebar { border-left: none; border-top: 1px solid var(--border-color); }
   .sidebar {
     position: fixed; height: calc(100vh - var(--header-height)); top: var(--header-height); left: -270px;
@@ -816,14 +826,45 @@ a { color: inherit; }
   .kpi-grid { grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); }
   .lead-panel { width: 100%; }
   .form-modal-dialog, .command-dialog { width: 100%; }
+
+  /* Chat-style modules (Inbox, Transmissões, Chat da Equipe): show either the
+     list OR the open conversation, never both stacked — avoids the confusing
+     "same name twice" effect of a 3-column layout squashed into one column. */
+  .chat-threads-list { max-height: none; }
+  .chat-main-panel, .chat-student-sidebar { display: none; }
+  .chat-layout.mobile-open .chat-threads-list { display: none; }
+  .chat-layout.mobile-open .chat-main-panel { display: flex; }
+  .chat-layout.mobile-open .chat-student-sidebar { display: flex; }
+  .chat-back-btn { display: inline-flex !important; }
+
+  /* Permission matrix: fixed, narrower columns so at least the label and the
+     first action column are visible without needing to discover the scroll. */
+  .perm-matrix { min-width: 480px; table-layout: fixed; }
+  .perm-matrix th:first-child, .perm-matrix td:first-child { width: 170px; white-space: normal; }
+  .perm-matrix th:not(:first-child), .perm-matrix td:not(:first-child) { width: 62px; }
 }
 
 @media (max-width: 480px) {
-  .top-header { padding: 0 12px; }
+  .top-header { padding: 0 10px; }
+  .header-left { gap: 10px; }
+  .header-right { gap: 8px; }
+  .brand-title { font-size: 0.95rem; }
   .brand-subtitle { display: none; }
   .header-actions { width: 100%; }
   .header-actions .btn { flex: 1; justify-content: center; }
   .page-header { flex-direction: column; align-items: flex-start; }
   .kanban-column { min-width: 240px; max-width: 240px; }
   .login-card { padding: 28px 20px; }
+
+  /* Notification/user dropdowns are wider than the viewport by default —
+     pin them to the screen instead of to their trigger button. */
+  .dropdown-panel { position: fixed; top: var(--header-height); left: 10px; right: 10px; width: auto; }
+
+  .perm-matrix th:first-child, .perm-matrix td:first-child { width: 130px; }
+
+  .chat-input-bar { padding: 10px 12px; gap: 8px; }
+  .chat-input-bar .btn { padding: 10px 12px; }
+  .chat-input-bar .btn span, .chat-input-bar .btn { white-space: nowrap; }
+  .chat-conversation-header { padding: 12px 16px; }
+  .chat-messages-container { padding: 16px; }
 }

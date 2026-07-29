@@ -1,6 +1,7 @@
 'use strict';
 
 const path = require('path');
+const crypto = require('crypto');
 const { DatabaseSync } = require('node:sqlite');
 const { hashPassword } = require('./crypto-utils');
 const { fullAccessPermissions } = require('./modules');
@@ -183,6 +184,9 @@ function ensureColumn(table, column, ddlType) {
   }
 }
 ensureColumn('courses', 'promotional_price', 'TEXT');
+ensureColumn('automations', 'channel', 'TEXT');
+ensureColumn('automations', 'send_time', 'TEXT');
+ensureColumn('automations', 'message', 'TEXT');
 
 // Stages are seeded independently of seedIfEmpty() so existing databases
 // (created before stage management existed) get backfilled on next boot.
@@ -273,24 +277,24 @@ function seedIfEmpty() {
   insertCourse.run('Engenharia de Software', 'EAD', 'R$ 590,00', '3.600h', 'Dr. Roberto Campos', 'Ativo', 2480);
   insertCourse.run('Medicina e Ciências da Saúde', 'Semipresencial', 'R$ 4.850,00', '7.200h', 'Dra. Patricia Alencar', 'Ativo', 620);
   insertCourse.run('Administração de Empresas', 'EAD', 'R$ 380,00', '3.200h', 'Prof. Marcelo Torres', 'Ativo', 3150);
-  insertCourse.run('MBA em Inteligência Artificial & Data Science', 'EAD (Pós)', 'R$ 720,00', '480h', 'Dr. Lucas Viana', 'Ativo', 1120);
+  insertCourse.run('MBA em Inteligência Artificial e Data Science', 'EAD (Pós)', 'R$ 720,00', '480h', 'Dr. Lucas Viana', 'Ativo', 1120);
 
   // --- Integrations ---
   const insertIntegration = db.prepare('INSERT INTO integrations (key, status, connected_at, meta) VALUES (?, ?, ?, ?)');
-  insertIntegration.run('whatsapp', 'connected', nowIso(), JSON.stringify({ numero: '+55 44 99120-0000' }));
-  insertIntegration.run('site', 'connected', nowIso(), JSON.stringify({ formulario: 'Landing Page Vestibular 2026/2' }));
+  insertIntegration.run('whatsapp', 'connected', nowIso(), JSON.stringify({ numero: '+55 44 99120-0000', webhookToken: crypto.randomBytes(10).toString('hex') }));
+  insertIntegration.run('site', 'connected', nowIso(), JSON.stringify({ formulario: 'Landing Page Vestibular 2026/2', webhookToken: crypto.randomBytes(10).toString('hex') }));
   insertIntegration.run('instagram', 'disconnected', null, JSON.stringify({}));
   insertIntegration.run('google', 'disconnected', null, JSON.stringify({}));
 
   // --- Automations ---
   const insertAutomation = db.prepare(`
-    INSERT INTO automations (name, description, trigger_desc, active, run_count, last_run_at)
-    VALUES (?, ?, ?, ?, ?, ?)
+    INSERT INTO automations (name, description, trigger_desc, channel, send_time, message, active, run_count, last_run_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
-  insertAutomation.run('Lembrete Automático de Mensalidades (D-3)', 'Disparo via WhatsApp 3 dias antes do vencimento do boleto.', 'D-3 antes do vencimento', 1, 1840, daysAgoIso(1));
-  insertAutomation.run('Boas-Vindas & Envio de Acesso ao AVA', 'Disparado após confirmação do pagamento da 1ª mensalidade.', 'Pagamento confirmado', 1, 420, daysAgoIso(2));
-  insertAutomation.run('Lembrete de Vestibular Online', 'Envio de lembrete 24h antes da aplicação do vestibular.', 'D-1 antes do vestibular', 1, 96, daysAgoIso(5));
-  insertAutomation.run('Alerta de Frequência Mínima no AVA (< 75%)', 'Notifica tutoria quando frequência do aluno cai abaixo de 75%.', 'Frequência < 75%', 0, 12, daysAgoIso(20));
+  insertAutomation.run('Lembrete Automático de Mensalidades (D-3)', 'Disparo via WhatsApp 3 dias antes do vencimento do boleto.', 'D-3 antes do vencimento', 'whatsapp', '09:00', 'Olá {{nome}}, seu boleto do curso {{curso}} vence em 3 dias. Evite juros, pague em dia!', 1, 1840, daysAgoIso(1));
+  insertAutomation.run('Boas-Vindas e Envio de Acesso ao AVA', 'Disparado após confirmação do pagamento da 1ª mensalidade.', 'Pagamento confirmado', 'email', '08:00', 'Parabéns pela matrícula em {{curso}}, {{nome}}! Seu acesso ao Portal AVA já está liberado.', 1, 420, daysAgoIso(2));
+  insertAutomation.run('Lembrete de Vestibular Online', 'Envio de lembrete 24h antes da aplicação do vestibular.', 'D-1 antes do vestibular', 'whatsapp', '18:00', 'Olá {{nome}}, seu vestibular online é amanhã. Bons estudos e boa sorte!', 1, 96, daysAgoIso(5));
+  insertAutomation.run('Alerta de Frequência Mínima no AVA (< 75%)', 'Notifica tutoria quando frequência do aluno cai abaixo de 75%.', 'Frequência < 75%', 'email', '07:00', 'Alerta: {{nome}} está com frequência abaixo de 75% no curso {{curso}}.', 0, 12, daysAgoIso(20));
 
   // --- Calendar events ---
   const insertEvent = db.prepare(`
@@ -324,12 +328,12 @@ function seedIfEmpty() {
     { name: 'Ana Clara Santos', email: 'ana.santos@aluno.unicesumar.edu.br', phone: '(14) 99841-2041', course: 'Engenharia de Software', polo: 'Botucatu - SP', stage: 'matricula', channel: 'whatsapp', type: 'pago', owner: lucasId, lastMsg: 'Enviei o comprovante da primeira parcela, pode confirmar?', daysAgo: 0 },
     { name: 'Marcos Vinicius Oliveira', email: 'marcos.v@gmail.com', phone: '(44) 99120-4912', course: 'Medicina', polo: 'Maringá - PR', stage: 'vestibular', channel: 'google', type: 'pago', owner: lucasId, lastMsg: 'Quando começam as aulas de anatomia presenciais?', daysAgo: 1 },
     { name: 'Juliana Paes Mendes', email: 'juliana.paes@outlook.com', phone: '(14) 98112-9034', course: 'Administração de Empresas', polo: 'Botucatu - SP', stage: 'inscrito', channel: 'instagram', type: 'organico', owner: lucasId, lastMsg: 'Ainda estou pensando, achei meio caro pra mim agora.', daysAgo: 6 },
-    { name: 'Gabriel Henrique Costa', email: 'gabriel.costa@tech.com', phone: '(41) 99741-0021', course: 'MBA em Inteligência Artificial & Data Science', polo: 'Curitiba - PR', stage: 'ativo', channel: 'site', type: 'organico', owner: elenaId, lastMsg: 'Obrigado pelo suporte, já estou com acesso ao AVA.', daysAgo: 10 },
+    { name: 'Gabriel Henrique Costa', email: 'gabriel.costa@tech.com', phone: '(41) 99741-0021', course: 'MBA em Inteligência Artificial e Data Science', polo: 'Curitiba - PR', stage: 'ativo', channel: 'site', type: 'organico', owner: elenaId, lastMsg: 'Obrigado pelo suporte, já estou com acesso ao AVA.', daysAgo: 10 },
     { name: 'Beatriz Lima Souza', email: 'beatriz.lima@gmail.com', phone: '(14) 99652-1189', course: 'Pedagogia', polo: 'Botucatu - SP', stage: 'documentacao', channel: 'whatsapp', type: 'organico', owner: lucasId, lastMsg: 'Já enviei o histórico do ensino médio, falta mais algo?', daysAgo: 2 },
     { name: 'Rafael Augusto Lima', email: 'rafael.lima@gmail.com', phone: '(14) 99011-2233', course: 'Engenharia de Software', polo: 'Botucatu - SP', stage: 'interessado', channel: 'instagram', type: 'pago', owner: lucasId, lastMsg: 'Vi o anúncio de vocês, tem desconto para quem se matricular essa semana?', daysAgo: 0 },
     { name: 'Camila Rocha Ferreira', email: 'camila.rocha@gmail.com', phone: '(44) 99022-3344', course: 'Medicina', polo: 'Maringá - PR', stage: 'interessado', channel: 'google', type: 'pago', owner: elenaId, lastMsg: 'Quero saber mais sobre a mensalidade e o processo seletivo.', daysAgo: 0 },
     { name: 'Thiago Nascimento Alves', email: 'thiago.alves@gmail.com', phone: '(14) 99033-4455', course: 'Administração de Empresas', polo: 'São Paulo Jardins - SP', stage: 'inscrito', channel: 'site', type: 'organico', owner: lucasId, lastMsg: 'Ok, vou esperar mais um pouco antes de decidir.', daysAgo: 9 },
-    { name: 'Larissa Martins Dias', email: 'larissa.martins@gmail.com', phone: '(44) 99044-5566', course: 'MBA em Inteligência Artificial & Data Science', polo: 'Curitiba - PR', stage: 'vestibular', channel: 'whatsapp', type: 'organico', owner: elenaId, lastMsg: 'Perfeito, me manda o boleto da primeira parcela!', daysAgo: 0 },
+    { name: 'Larissa Martins Dias', email: 'larissa.martins@gmail.com', phone: '(44) 99044-5566', course: 'MBA em Inteligência Artificial e Data Science', polo: 'Curitiba - PR', stage: 'vestibular', channel: 'whatsapp', type: 'organico', owner: elenaId, lastMsg: 'Perfeito, me manda o boleto da primeira parcela!', daysAgo: 0 },
     { name: 'Eduardo Santos Barros', email: 'eduardo.barros@gmail.com', phone: '(14) 99055-6677', course: 'Pedagogia', polo: 'Botucatu - SP', stage: 'interessado', channel: 'instagram', type: 'organico', owner: lucasId, lastMsg: 'Vou esperar o próximo semestre, não tenho tempo agora.', daysAgo: 15 },
     { name: 'Patrícia Gomes Rezende', email: 'patricia.rezende@gmail.com', phone: '(41) 99066-7788', course: 'Engenharia de Software', polo: 'Curitiba - PR', stage: 'documentacao', channel: 'google', type: 'pago', owner: lucasId, lastMsg: 'Segue em anexo meu RG e comprovante de residência.', daysAgo: 1 },
     { name: 'Vinícius Almeida Cruz', email: 'vinicius.cruz@gmail.com', phone: '(14) 99077-8899', course: 'Medicina', polo: 'Botucatu - SP', stage: 'inscrito', channel: 'site', type: 'organico', owner: elenaId, lastMsg: 'Qual o valor da inscrição no vestibular?', daysAgo: 4 }

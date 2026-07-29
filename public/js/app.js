@@ -29,6 +29,7 @@
     leadsCache: [],
     coursesCache: [],
     automationsCache: [],
+    integrationsCache: [],
     stagesCache: [],
     usersCache: [],
     rolesCache: [],
@@ -76,6 +77,15 @@
   function tempInfo(key) { return TEMPERATURES.find(x => x.key === key) || { label: key, color: '#94A3B8' }; }
   function channelLabel(key) { return CHANNEL_LABELS[key] || key; }
 
+  // Small inline badge shown right next to a lead/contact name: channel icon,
+  // plus an "Anúncio" tag when the lead came from a paid ad (vs. organic).
+  function sourceIconHtml(lead) {
+    const icon = CHANNEL_ICONS[lead.sourceChannel] || 'radio';
+    const title = `${channelLabel(lead.sourceChannel)}${lead.sourceType === 'pago' ? ' · Anúncio' : ' · Orgânico'}`;
+    const adTag = lead.sourceType === 'pago' ? `<span class="ad-tag">Anúncio</span>` : '';
+    return `<span class="source-inline" title="${esc(title)}">${adTag}<i data-feather="${icon}" class="source-icon"></i></span>`;
+  }
+
   function showToast(message, type) {
     const container = document.getElementById('toast-container');
     const toast = document.createElement('div');
@@ -86,6 +96,16 @@
   }
 
   function refreshIcons() { if (window.feather) window.feather.replace(); }
+
+  // On phones, chat-style modules show either the list or the open item, never
+  // both stacked — see .chat-layout.mobile-open in the mobile media query.
+  function enterMobileChatView() {
+    const layout = document.querySelector('.chat-layout');
+    if (layout) layout.classList.add('mobile-open');
+  }
+  function chatBackButtonHtml() {
+    return `<button type="button" class="chat-back-btn" id="chat-back-btn"><i data-feather="arrow-left"></i> Voltar para a lista</button>`;
+  }
 
   function can(moduleKey, action) {
     return !!(state.permissions && state.permissions[moduleKey] && state.permissions[moduleKey][action]);
@@ -143,8 +163,9 @@
       const submitBtn = overlay.querySelector('#fm-submit');
       submitBtn.disabled = true;
       try {
-        await onSubmit(values, overlay);
-        close();
+        const result = await onSubmit(values, overlay);
+        submitBtn.disabled = false;
+        if (result !== 'keep-open') close();
       } catch (err) {
         errorBox.textContent = err.message || 'Erro inesperado.';
         errorBox.style.display = 'block';
@@ -312,11 +333,16 @@
     // Notifications dropdown
     const notifBtn = document.getElementById('notification-btn');
     const notifDropdown = document.getElementById('notification-dropdown');
-    notifBtn.addEventListener('click', (e) => { e.stopPropagation(); notifDropdown.classList.toggle('hidden'); });
-    document.getElementById('mark-notifications-read').addEventListener('click', () => {
+    function clearNotificationBadge() {
       document.getElementById('notification-count').textContent = '0';
       notifDropdown.querySelectorAll('.notification-item').forEach(i => i.classList.remove('unread'));
+    }
+    notifBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      notifDropdown.classList.toggle('hidden');
+      if (!notifDropdown.classList.contains('hidden')) clearNotificationBadge();
     });
+    document.getElementById('mark-notifications-read').addEventListener('click', clearNotificationBadge);
 
     // User menu dropdown
     const userMenuTrigger = document.getElementById('user-profile-menu');
@@ -392,10 +418,10 @@
 
   function moduleLabel(key) {
     const map = {
-      insights: 'Insights Executivos', comunicacoes: 'Comunicações', pipelines: 'Jornada do Lead',
-      calendario: 'Calendário Acadêmico', cursos: 'Cursos & Disciplinas', listas: 'Diretório & Listas',
-      'agente-ia': 'Assistente Nexus AI', automacoes: 'Automações & Bots',
-      relatorios: 'Central de Relatórios', integracoes: 'Hub de Integrações', configuracoes: 'Configurações & Permissões'
+      insights: 'Dashboard', comunicacoes: 'Comunicações', pipelines: 'Jornada do Lead',
+      calendario: 'Calendário Acadêmico', cursos: 'Cursos e Disciplinas', listas: 'Diretório e Listas',
+      'agente-ia': 'Assistente Nexus AI', automacoes: 'Automações e Bots',
+      relatorios: 'Central de Relatórios', integracoes: 'Hub de Integrações', configuracoes: 'Configurações e Permissões'
     };
     return map[key] || key;
   }
@@ -460,13 +486,13 @@
     container.innerHTML = `
       <div class="page-header">
         <div class="page-title-group">
-          <h2>Insights Executivos & Analytics</h2>
+          <h2>Dashboard</h2>
           <p>Visão geral de desempenho acadêmico, captação e indicadores operacionais</p>
         </div>
         ${can('relatorios', 'export') ? `
         <div class="header-actions">
           <a class="btn btn-secondary" href="${api.downloadUrl('/reports/leads.csv')}"><i data-feather="download"></i> Exportar Alunos/Leads</a>
-          <a class="btn btn-primary" href="${api.downloadUrl('/reports/courses.csv')}"><i data-feather="file-spreadsheet"></i> Exportar Cursos</a>
+          <a class="btn btn-primary" href="${api.downloadUrl('/reports/courses.csv')}"><i data-feather="download"></i> Exportar Cursos</a>
         </div>` : ''}
       </div>
 
@@ -622,6 +648,7 @@
         state.selectedThreadLeadId = Number(item.getAttribute('data-id'));
         left.querySelectorAll('#thread-items .thread-item').forEach(i => i.classList.remove('active'));
         item.classList.add('active');
+        enterMobileChatView();
         loadConversation(state.selectedThreadLeadId);
       });
     });
@@ -654,6 +681,7 @@
         const found = lists.find(l => l.id === item.getAttribute('data-broadcast-id'));
         left.querySelectorAll('[data-broadcast-id]').forEach(i => i.classList.remove('active'));
         item.classList.add('active');
+        enterMobileChatView();
         loadBroadcastComposer(found);
       });
     });
@@ -676,6 +704,7 @@
     const { broadcasts } = await api.get(`/leads/broadcasts?filterType=${encodeURIComponent(list.filterType)}&filterValue=${encodeURIComponent(list.filterValue)}`);
 
     panel.innerHTML = `
+      ${chatBackButtonHtml()}
       <div class="chat-conversation-header">
         <div>
           <h5 style="font-size:0.95rem;font-weight:700;">${esc(list.label)}</h5>
@@ -722,6 +751,8 @@
       <hr class="section-divider">
       <div><h6>Histórico</h6><p style="font-size:0.8rem;">${broadcasts.length} transmissão(ões) já enviada(s) para este segmento.</p></div>
     `;
+    const backBtn = document.getElementById('chat-back-btn');
+    if (backBtn) backBtn.addEventListener('click', () => renderInboxDoChat(document.getElementById('comms-body')));
     refreshIcons();
   }
 
@@ -756,7 +787,7 @@
         </div>
         <div class="table-scroll">
           <table class="nexus-table">
-            <thead><tr><th>Nome</th><th>Curso</th><th>Polo</th><th>Etapa</th><th>Temperatura</th><th>Canal</th><th></th></tr></thead>
+            <thead><tr><th>Nome</th><th>Curso</th><th>Polo</th><th>Etapa</th><th>Temperatura</th><th></th></tr></thead>
             <tbody id="ct-table-body"></tbody>
           </table>
         </div>
@@ -780,12 +811,11 @@
       );
       document.getElementById('ct-table-body').innerHTML = filtered.map(l => `
         <tr>
-          <td><b>${esc(l.name)}</b></td>
+          <td><b>${esc(l.name)}</b> ${sourceIconHtml(l)}</td>
           <td>${esc(l.courseInterest || '—')}</td>
           <td>${esc(l.polo || '—')}</td>
           <td>${esc(stageLabel(l.stage))}</td>
           <td><span class="temp-badge ${l.temperature}">${esc(tempInfo(l.temperature).label)}</span></td>
-          <td>${channelLabel(l.sourceChannel)}</td>
           <td><i class="icon-action" data-feather="eye" data-action="open-lead" data-id="${l.id}"></i></td>
         </tr>
       `).join('') || '<tr><td colspan="7">Nenhum contato encontrado com esses filtros.</td></tr>';
@@ -887,6 +917,7 @@
         const group = groups.find(g => g.id === Number(item.getAttribute('data-group-id')));
         body.querySelectorAll('[data-group-id]').forEach(i => i.classList.remove('active'));
         item.classList.add('active');
+        enterMobileChatView();
         loadTeamGroup(group);
       });
     });
@@ -904,6 +935,7 @@
     const sidebar = document.getElementById('team-chat-sidebar');
 
     panel.innerHTML = `
+      ${chatBackButtonHtml()}
       <div class="chat-conversation-header">
         <div><h5 style="font-size:0.95rem;font-weight:700;">${esc(group.name)}</h5><span style="font-size:0.75rem;color:var(--uc-cyan-accent);">${group.members.length} membro(s)</span></div>
       </div>
@@ -948,6 +980,8 @@
       </div>
       ${state.user.isGestor ? `<button class="btn btn-secondary btn-sm" data-action="team-group-add-member" data-id="${group.id}"><i data-feather="user-plus"></i> Adicionar Membro</button>` : ''}
     `;
+    const backBtn = document.getElementById('chat-back-btn');
+    if (backBtn) backBtn.addEventListener('click', () => renderChatDaEquipe(document.getElementById('comms-body')));
     refreshIcons();
   }
 
@@ -999,7 +1033,7 @@
       <div class="thread-item" data-id="${l.id}" data-name="${esc((l.name || '').toLowerCase())}">
         <div class="thread-avatar">${esc(initials)}</div>
         <div class="thread-details">
-          <div class="thread-top"><span>${esc(l.name)}</span><span style="font-size:0.68rem;color:var(--text-muted)">${channelLabel(l.sourceChannel)}</span></div>
+          <div class="thread-top"><span>${esc(l.name)} ${sourceIconHtml(l)}</span></div>
           <div class="thread-msg">${esc(l.courseInterest || 'Curso não informado')} · ${fmtRelative(l.lastInteractionAt)}</div>
         </div>
       </div>
@@ -1013,6 +1047,7 @@
     const messages = lead.events.filter(e => e.type === 'message');
 
     panel.innerHTML = `
+      ${chatBackButtonHtml()}
       <div class="chat-conversation-header">
         <div>
           <h5 style="font-size:0.95rem;font-weight:700;">${esc(lead.name)}</h5>
@@ -1065,6 +1100,8 @@
       </div>
       <button class="btn btn-secondary btn-sm" data-action="open-lead" data-id="${lead.id}"><i data-feather="external-link"></i> Ver perfil completo</button>
     `;
+    const backBtn = document.getElementById('chat-back-btn');
+    if (backBtn) backBtn.addEventListener('click', () => renderInboxDoChat(document.getElementById('comms-body')));
     refreshIcons();
   }
 
@@ -1111,11 +1148,14 @@
         { name: 'color', label: 'Cor', type: 'select', options: STAGE_COLOR_OPTIONS.map(c => ({ value: c, label: c })) }
       ],
       extraHtml: `<div class="form-hint" style="margin-bottom:8px;">As etapas abaixo já existem. Renomeie, mude a cor, reordene ou exclua (só é possível excluir uma etapa sem leads nela).</div><div id="stage-manager-list" class="stage-manager-list"></div>`,
-      onSubmit: async (values) => {
+      onSubmit: async (values, overlay) => {
         await api.post('/stages', values);
         await refreshStagesCache();
         showToast('Etapa criada.', 'success');
-        if (state.currentModule === 'pipelines') await switchModule('pipelines');
+        renderStageManagerList();
+        overlay.querySelector('[name="label"]').value = '';
+        if (state.currentModule === 'pipelines') renderKanbanBoard();
+        return 'keep-open';
       }
     });
     renderStageManagerList();
@@ -1201,11 +1241,10 @@
     const temp = tempInfo(l.temperature);
     return `
       <div class="kanban-card" draggable="true" data-drag-id="${l.id}">
-        <div class="kanban-card-top">
-          <span class="channel-chip"><i data-feather="radio"></i> ${channelLabel(l.sourceChannel)}</span>
+        <div class="kanban-card-top" style="justify-content:flex-end;">
           <span class="temp-badge ${l.temperature}">${esc(temp.label)}</span>
         </div>
-        <span class="student-name">${esc(l.name)}</span>
+        <span class="student-name">${esc(l.name)} ${sourceIconHtml(l)}</span>
         <span class="student-info">${esc(l.courseInterest || 'Curso não informado')}</span>
         <div class="card-footer">
           <span>${esc(l.polo || '—')}</span>
@@ -1236,7 +1275,7 @@
       <div class="lead-panel">
         <div class="lead-panel-header">
           <div>
-            <h3>${esc(lead.name)}</h3>
+            <h3>${esc(lead.name)} ${sourceIconHtml(lead)}</h3>
             <div class="lead-meta">${esc(lead.courseInterest || 'Curso não informado')} · ${esc(lead.polo || '')}</div>
           </div>
           <span class="close-modal-btn" id="lead-panel-close" style="cursor:pointer;font-size:1.4rem;color:var(--text-muted)">&times;</span>
@@ -1255,7 +1294,7 @@
           </div>
 
           <div class="lead-panel-section">
-            <h6>Situação & Sugestão da IA Nexus</h6>
+            <h6>Situação e Sugestão da IA Nexus</h6>
             <div class="ai-suggestion-box">
               <div class="situacao">${esc(lead.ai.situacao)}</div>
               <div class="mensagem">"${esc(lead.ai.mensagemSugerida)}"</div>
@@ -1455,7 +1494,7 @@
     container.innerHTML = `
       <div class="page-header">
         <div class="page-title-group">
-          <h2>Catálogo de Cursos & Ofertas Acadêmicas</h2>
+          <h2>Catálogo de Cursos e Ofertas Acadêmicas</h2>
           <p>Graduações EAD, Semipresenciais e Pós-Graduação</p>
         </div>
         ${can('cursos', 'create') ? `<button class="btn btn-primary" data-action="course-new"><i data-feather="plus"></i> Cadastrar Curso</button>` : ''}
@@ -1528,12 +1567,12 @@
     container.innerHTML = `
       <div class="page-header">
         <div class="page-title-group">
-          <h2>Diretório Acadêmico & Listas Enterprise</h2>
+          <h2>Diretório Acadêmico e Listas Enterprise</h2>
           <p>Busque por nome, curso, polo, etapa ou temperatura — alunos, candidatos e corpo docente</p>
         </div>
       </div>
       <div class="tabs-bar">
-        <button class="tab-btn active" data-listas-tab="alunos">Alunos & Candidatos</button>
+        <button class="tab-btn active" data-listas-tab="alunos">Alunos e Candidatos</button>
         <button class="tab-btn" data-listas-tab="docentes">Corpo Docente</button>
       </div>
       <div id="listas-body"></div>
@@ -1632,31 +1671,37 @@
   /* ==========================================================================
      MODULE: AUTOMAÇÕES (bots + galeria de modelos, estilo Kommo)
      ========================================================================== */
+  const AUTOMATION_CHANNEL_LABELS = { whatsapp: 'WhatsApp', email: 'E-mail', sms: 'SMS', push: 'Notificação Push' };
   const AUTOMATION_TEMPLATES = [
     {
       key: 'recuperacao', name: 'Recuperação de Leads Abandonados', triggerDesc: 'Sem resposta há 3 dias',
       description: 'Reengaja automaticamente leads que pararam de responder no meio da conversa.',
-      icon: 'rotate-ccw', preview: 'Oi! Vi que você tinha interesse em um dos nossos cursos 👋 Ainda posso te ajudar com alguma dúvida?'
+      icon: 'rotate-ccw', channel: 'whatsapp', sendTime: '10:00',
+      preview: 'Oi! Vi que você tinha interesse em um dos nossos cursos 👋 Ainda posso te ajudar com alguma dúvida?'
     },
     {
-      key: 'boasvindas', name: 'Boas-Vindas & Acesso ao AVA', triggerDesc: 'Pagamento da 1ª mensalidade confirmado',
+      key: 'boasvindas', name: 'Boas-Vindas e Acesso ao AVA', triggerDesc: 'Pagamento da 1ª mensalidade confirmado',
       description: 'Envia as credenciais de acesso ao Ambiente Virtual de Aprendizagem assim que a matrícula é efetivada.',
-      icon: 'user-check', preview: 'Parabéns pela matrícula 🎓 Seu acesso ao Portal AVA já está liberado. Bons estudos!'
+      icon: 'user-check', channel: 'email', sendTime: '08:00',
+      preview: 'Parabéns pela matrícula 🎓 Seu acesso ao Portal AVA já está liberado. Bons estudos!'
     },
     {
       key: 'vestibular', name: 'Lembrete de Vestibular Online', triggerDesc: 'D-1 antes da aplicação da prova',
       description: 'Lembra os candidatos inscritos sobre data, horário e link da prova do vestibular.',
-      icon: 'calendar', preview: 'Lembrete: seu vestibular online é amanhã às 9h. Boa sorte na prova! 🍀'
+      icon: 'calendar', channel: 'whatsapp', sendTime: '18:00',
+      preview: 'Lembrete: seu vestibular online é amanhã às 9h. Boa sorte na prova! 🍀'
     },
     {
       key: 'frequencia', name: 'Alerta de Frequência Mínima', triggerDesc: 'Frequência no AVA abaixo de 75%',
       description: 'Notifica a tutoria quando um aluno ativo cai abaixo da frequência mínima exigida.',
-      icon: 'alert-triangle', preview: 'Alerta interno: o aluno está com frequência abaixo de 75% este mês. Sugerido contato da tutoria.'
+      icon: 'alert-triangle', channel: 'email', sendTime: '07:00',
+      preview: 'Alerta interno: o aluno está com frequência abaixo de 75% este mês. Sugerido contato da tutoria.'
     },
     {
       key: 'nutricao', name: 'Nutrição de Leads Frios (IA)', triggerDesc: 'Lead classificado como FRIO pela IA Nexus',
       description: 'Inclui automaticamente leads frios em uma régua de conteúdo para reaquecer o interesse.',
-      icon: 'thermometer', preview: 'Ainda dá tempo! Preparamos condições especiais para quem se matricular esta semana 🎯'
+      icon: 'thermometer', channel: 'whatsapp', sendTime: '15:00',
+      preview: 'Ainda dá tempo! Preparamos condições especiais para quem se matricular esta semana 🎯'
     }
   ];
 
@@ -1666,7 +1711,7 @@
     container.innerHTML = `
       <div class="page-header">
         <div class="page-title-group">
-          <h2>Motor de Automações & Bots Acadêmicos</h2>
+          <h2>Motor de Automações e Bots Acadêmicos</h2>
           <p>Ative modelos prontos com um clique ou gerencie suas automações ativas</p>
         </div>
         ${can('automacoes', 'create') ? `<button class="btn btn-primary" data-action="automation-new"><i data-feather="zap"></i> Nova Automação em Branco</button>` : ''}
@@ -1676,12 +1721,14 @@
         <div class="chart-header"><h4>Automações Ativas</h4></div>
         <div class="table-scroll">
           <table class="nexus-table">
-            <thead><tr><th>Nome</th><th>Gatilho</th><th>Status</th><th>Execuções</th><th>Última Execução</th><th>Ações</th></tr></thead>
+            <thead><tr><th>Nome</th><th>Gatilho</th><th>Canal</th><th>Horário</th><th>Status</th><th>Execuções</th><th>Ações</th></tr></thead>
             <tbody>
               ${automations.map(a => `
                 <tr>
                   <td><b>${esc(a.name)}</b><br><span class="text-sub" style="font-size:0.72rem;">${esc(a.description || '')}</span></td>
                   <td style="font-size:0.78rem;">${esc(a.triggerDesc || '—')}</td>
+                  <td style="font-size:0.78rem;">${esc(AUTOMATION_CHANNEL_LABELS[a.channel] || a.channel || '—')}</td>
+                  <td style="font-size:0.78rem;"><i data-feather="clock" style="width:12px;height:12px;vertical-align:-2px;"></i> ${esc(a.sendTime || '—')}</td>
                   <td>
                     ${can('automacoes', 'edit') ? `
                       <label class="switch" title="${a.active ? 'Desativar' : 'Ativar'}">
@@ -1690,15 +1737,15 @@
                       </label>
                     ` : `<span style="color:${a.active ? 'var(--accent-success)' : 'var(--text-muted)'}; font-weight:700; font-size:0.78rem;">${a.active ? 'Ativo' : 'Inativo'}</span>`}
                   </td>
-                  <td>${a.runCount}</td>
-                  <td style="font-size:0.78rem;">${a.lastRunAt ? fmtRelative(a.lastRunAt) : 'nunca'}</td>
+                  <td style="font-size:0.78rem;">${a.runCount}x<br><span class="text-sub" style="font-size:0.68rem;">${a.lastRunAt ? fmtRelative(a.lastRunAt) : 'nunca'}</span></td>
                   <td class="row-actions">
                     ${can('automacoes', 'edit') ? `<button class="btn btn-secondary btn-sm" data-action="automation-run" data-id="${a.id}" ${a.active ? '' : 'disabled'}>Executar agora</button>` : ''}
+                    ${can('automacoes', 'edit') ? `<button class="btn btn-secondary btn-sm" data-action="automation-test-send" data-id="${a.id}"><i data-feather="send"></i> Testar Envio</button>` : ''}
                     ${can('automacoes', 'edit') ? `<i class="icon-action" data-feather="edit-2" data-action="automation-edit" data-id="${a.id}"></i>` : ''}
                     ${can('automacoes', 'delete') ? `<i class="icon-action danger" data-feather="trash-2" data-action="automation-delete" data-id="${a.id}"></i>` : ''}
                   </td>
                 </tr>
-              `).join('') || '<tr><td colspan="6">Nenhuma automação ativa ainda — adicione um modelo abaixo.</td></tr>'}
+              `).join('') || '<tr><td colspan="7">Nenhuma automação ativa ainda — adicione um modelo abaixo.</td></tr>'}
             </tbody>
           </table>
         </div>
@@ -1734,7 +1781,10 @@
       fields: [
         { name: 'name', label: 'Nome', required: true, value: existingAutomation && existingAutomation.name },
         { name: 'description', label: 'Descrição', type: 'textarea', value: existingAutomation && existingAutomation.description },
-        { name: 'triggerDesc', label: 'Gatilho', placeholder: 'Ex: D-3 antes do vencimento', value: existingAutomation && existingAutomation.triggerDesc }
+        { name: 'triggerDesc', label: 'Gatilho', placeholder: 'Ex: D-3 antes do vencimento', value: existingAutomation && existingAutomation.triggerDesc },
+        { name: 'channel', label: 'Canal de Envio', type: 'select', value: (existingAutomation && existingAutomation.channel) || 'whatsapp', options: Object.entries(AUTOMATION_CHANNEL_LABELS).map(([value, label]) => ({ value, label })) },
+        { name: 'sendTime', label: 'Horário de Disparo', type: 'time', value: (existingAutomation && existingAutomation.sendTime) || '09:00' },
+        { name: 'message', label: 'Mensagem a Enviar', type: 'textarea', value: existingAutomation && existingAutomation.message, placeholder: 'Ex: Olá {{nome}}, seu boleto do curso {{curso}} vence em breve...', hint: 'Use {{nome}} e {{curso}} para personalizar automaticamente.' }
       ],
       onSubmit: async (values) => {
         if (existingAutomation) await api.put(`/automations/${existingAutomation.id}`, values);
@@ -1745,11 +1795,18 @@
     });
   }
 
+  async function testSendAutomation(id) {
+    try {
+      const res = await api.post(`/automations/${id}/test-send`);
+      showToast(`Teste simulado enviado via ${AUTOMATION_CHANNEL_LABELS[res.preview.channel] || res.preview.channel} às ${res.preview.sendTime}.`, 'success');
+    } catch (err) { showToast(err.message, 'error'); }
+  }
+
   /* ==========================================================================
      MODULE: RELATÓRIOS (visualização inline + download real)
      ========================================================================== */
   const REPORT_TABS = [
-    { key: 'leads', label: 'Alunos & Leads', csv: '/reports/leads.csv' },
+    { key: 'leads', label: 'Alunos e Leads', csv: '/reports/leads.csv' },
     { key: 'cursos', label: 'Cursos', csv: '/reports/courses.csv' },
     { key: 'calendario', label: 'Calendário', csv: '/reports/calendar.csv' },
     { key: 'auditoria', label: 'Auditoria', csv: '/reports/audit.csv', gestorOnly: true }
@@ -1833,11 +1890,12 @@
      ========================================================================== */
   async function renderIntegracoes(container) {
     const { integrations } = await api.get('/integrations');
+    state.integrationsCache = integrations;
     container.innerHTML = `
       <div class="page-header">
         <div class="page-title-group">
           <h2>Hub de Integrações Enterprise</h2>
-          <p>Conecte canais de captação — leads chegam automaticamente e são classificados pela IA. (Integrações simuladas neste ambiente: sem OAuth/webhook real configurado.)</p>
+          <p>Conecte canais de captação — leads chegam automaticamente e são classificados pela IA. (Conexão e sincronização simuladas neste ambiente; o webhook de recebimento é real e funcional.)</p>
         </div>
       </div>
       <div class="card-list-grid">
@@ -1848,10 +1906,15 @@
               <span class="${i.status === 'connected' ? 'badge-connected' : 'badge-disconnected'}">${i.status === 'connected' ? 'Conectado' : 'Desconectado'}</span>
             </div>
             <p style="font-size:0.8rem; color:var(--text-sub)">${i.status === 'connected' ? 'Recebendo leads automaticamente.' : 'Conecte para começar a capturar leads deste canal.'}</p>
+            ${i.status === 'connected' ? `
+              <p style="font-size:0.72rem; color:var(--text-muted)">Chave de API: ${i.apiKeyMasked ? esc(i.apiKeyMasked) : 'não configurada'} · Auto-resposta: ${i.autoReply ? 'ativa' : 'inativa'}</p>
+            ` : ''}
             <div style="display:flex; gap:8px; flex-wrap:wrap; margin-top:8px;">
               ${can('integracoes', 'edit') ? (i.status === 'connected'
                 ? `<button class="btn btn-secondary btn-sm" data-action="integration-disconnect" data-id="${i.key}">Desconectar</button>`
                 : `<button class="btn btn-primary btn-sm" data-action="integration-connect" data-id="${i.key}">Conectar</button>`) : ''}
+              ${can('integracoes', 'edit') && i.status === 'connected' ? `<button class="btn btn-secondary btn-sm" data-action="integration-configure" data-id="${i.key}"><i data-feather="settings"></i> Configurar</button>` : ''}
+              ${i.status === 'connected' ? `<button class="btn btn-secondary btn-sm" data-action="integration-test" data-id="${i.key}"><i data-feather="activity"></i> Testar Conexão</button>` : ''}
               ${can('integracoes', 'edit') && i.status === 'connected' ? `
                 <button class="btn btn-secondary btn-sm" data-action="integration-simulate" data-id="${i.key}" data-source-type="organico">Simular Lead Orgânico</button>
                 <button class="btn btn-secondary btn-sm" data-action="integration-simulate" data-id="${i.key}" data-source-type="pago">Simular Lead Pago</button>
@@ -1864,6 +1927,30 @@
     refreshIcons();
   }
 
+  function openIntegrationConfigModal(integration) {
+    const webhookFullUrl = integration.webhookUrl ? `${location.origin}${integration.webhookUrl}` : null;
+    openFormModal({
+      title: `Configurar ${integration.label}`,
+      submitLabel: 'Salvar Configuração',
+      fields: [
+        { name: 'apiKey', label: 'Chave de API / Token (simulado)', type: 'password', placeholder: integration.apiKeyMasked || 'Cole aqui a chave da plataforma', hint: 'Armazenada apenas para fins de demonstração.' },
+        { name: 'autoReply', label: 'Responder automaticamente novas mensagens', type: 'checkbox', value: integration.autoReply }
+      ],
+      extraHtml: webhookFullUrl ? `
+        <div class="form-group">
+          <label>URL do Webhook (real — aceita POST de fora)</label>
+          <input type="text" readonly value="${esc(webhookFullUrl)}" onclick="this.select();" style="background:var(--bg-input); border:1px solid var(--border-color); border-radius:var(--radius-md); padding:10px 14px; font-size:0.78rem; width:100%;">
+          <span class="form-hint">Envie um POST com JSON {"name": "...", "email": "...", "message": "..."} para esta URL a partir de qualquer ferramenta externa (Zapier, Make, curl) e um lead será criado de verdade nesta plataforma.</span>
+        </div>
+      ` : '',
+      onSubmit: async (values) => {
+        await api.put(`/integrations/${integration.key}/config`, values);
+        showToast('Configuração salva.', 'success');
+        await switchModule('integracoes');
+      }
+    });
+  }
+
   /* ==========================================================================
      MODULE: CONFIGURAÇÕES (RBAC, Usuários, Cargos, Departamentos, Auditoria)
      ========================================================================== */
@@ -1872,7 +1959,7 @@
     container.innerHTML = `
       <div class="page-header">
         <div class="page-title-group">
-          <h2>Configurações & Permissões (RBAC)</h2>
+          <h2>Configurações e Permissões (RBAC)</h2>
           <p>Gestão de usuários, cargos, departamentos e permissões granulares</p>
         </div>
       </div>
@@ -2289,6 +2376,7 @@
           showToast('Automação executada (simulação).', 'success');
           await switchModule('automacoes');
           break;
+        case 'automation-test-send': await testSendAutomation(id); break;
         case 'automation-delete':
           if (confirmAction('Excluir esta automação?')) {
             await api.del(`/automations/${id}`);
@@ -2299,7 +2387,7 @@
         case 'automation-template-add': {
           const tpl = AUTOMATION_TEMPLATES.find(t => t.key === id);
           if (tpl) {
-            await api.post('/automations', { name: tpl.name, description: tpl.description, triggerDesc: tpl.triggerDesc });
+            await api.post('/automations', { name: tpl.name, description: tpl.description, triggerDesc: tpl.triggerDesc, channel: tpl.channel, sendTime: tpl.sendTime, message: tpl.preview });
             showToast(`Automação "${tpl.name}" adicionada e ativada.`, 'success');
             await switchModule('automacoes');
           }
@@ -2308,6 +2396,16 @@
 
         case 'integration-connect': await api.post(`/integrations/${id}/connect`); showToast('Integração conectada.', 'success'); await switchModule('integracoes'); break;
         case 'integration-disconnect': await api.post(`/integrations/${id}/disconnect`); showToast('Integração desconectada.', 'info'); await switchModule('integracoes'); break;
+        case 'integration-configure': {
+          const integration = (state.integrationsCache || []).find(i => i.key === id);
+          if (integration) openIntegrationConfigModal(integration);
+          break;
+        }
+        case 'integration-test': {
+          const res = await api.post(`/integrations/${id}/test`);
+          showToast(`Conexão OK — resposta em ${res.latencyMs}ms.`, 'success');
+          break;
+        }
         case 'integration-simulate': {
           const sourceType = el.getAttribute('data-source-type');
           const res = await api.post(`/integrations/${id}/simulate-lead`, { sourceType });
