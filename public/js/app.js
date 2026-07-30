@@ -1891,11 +1891,26 @@
   async function renderIntegracoes(container) {
     const { integrations } = await api.get('/integrations');
     state.integrationsCache = integrations;
+
+    function renderStatusBadge(status) {
+      if (status === 'connected') return `<span class="badge-status badge-connected"><span class="status-dot online"></span> Conectado</span>`;
+      if (status === 'in_setup') return `<span class="badge-status badge-in-setup"><span class="status-dot warning"></span> Em implantação</span>`;
+      if (status === 'in_config') return `<span class="badge-status badge-in-config"><span class="status-dot warning"></span> Integração em configuração</span>`;
+      return `<span class="badge-status badge-disconnected"><span class="status-dot offline"></span> Desconectado</span>`;
+    }
+
+    function renderStatusDesc(status) {
+      if (status === 'connected') return 'Canal ativo. Leads são capturados e classificados automaticamente pela IA Nexus.';
+      if (status === 'in_setup') return 'Integração em fase de implantação técnica e homologação nos canais do polo.';
+      if (status === 'in_config') return 'Integração em configuração de chaves de API e credenciais de acesso.';
+      return 'Canal desativado. Conecte para começar a capturar leads deste canal.';
+    }
+
     container.innerHTML = `
       <div class="page-header">
         <div class="page-title-group">
           <h2>Hub de Integrações Enterprise</h2>
-          <p>Conecte canais de captação — leads chegam automaticamente e são classificados pela IA. (Conexão e sincronização simuladas neste ambiente; o webhook de recebimento é real e funcional.)</p>
+          <p>Gerencie as conexões de canais de captação — dados integrados diretamente com a Jornada do Lead</p>
         </div>
       </div>
       <div class="card-list-grid">
@@ -1903,21 +1918,21 @@
           <div class="kpi-card">
             <div style="display:flex; justify-content:space-between; align-items:center;">
               <h4 style="font-size:1rem; font-weight:700">${esc(i.label)}</h4>
-              <span class="${i.status === 'connected' ? 'badge-connected' : 'badge-disconnected'}">${i.status === 'connected' ? 'Conectado' : 'Desconectado'}</span>
+              ${renderStatusBadge(i.status)}
             </div>
-            <p style="font-size:0.8rem; color:var(--text-sub)">${i.status === 'connected' ? 'Recebendo leads automaticamente.' : 'Conecte para começar a capturar leads deste canal.'}</p>
+            <p style="font-size:0.8rem; color:var(--text-sub)">${renderStatusDesc(i.status)}</p>
             ${i.status === 'connected' ? `
               <p style="font-size:0.72rem; color:var(--text-muted)">Chave de API: ${i.apiKeyMasked ? esc(i.apiKeyMasked) : 'não configurada'} · Auto-resposta: ${i.autoReply ? 'ativa' : 'inativa'}</p>
             ` : ''}
             <div style="display:flex; gap:8px; flex-wrap:wrap; margin-top:8px;">
               ${can('integracoes', 'edit') ? (i.status === 'connected'
                 ? `<button class="btn btn-secondary btn-sm" data-action="integration-disconnect" data-id="${i.key}">Desconectar</button>`
-                : `<button class="btn btn-primary btn-sm" data-action="integration-connect" data-id="${i.key}">Conectar</button>`) : ''}
+                : `<button class="btn btn-primary btn-sm" data-action="integration-connect" data-id="${i.key}">${i.status === 'in_setup' || i.status === 'in_config' ? 'Concluir Configuração' : 'Conectar'}</button>`) : ''}
               ${can('integracoes', 'edit') && i.status === 'connected' ? `<button class="btn btn-secondary btn-sm" data-action="integration-configure" data-id="${i.key}"><i data-feather="settings"></i> Configurar</button>` : ''}
-              ${i.status === 'connected' ? `<button class="btn btn-secondary btn-sm" data-action="integration-test" data-id="${i.key}"><i data-feather="activity"></i> Testar Conexão</button>` : ''}
-              ${can('integracoes', 'edit') && i.status === 'connected' ? `
-                <button class="btn btn-secondary btn-sm" data-action="integration-simulate" data-id="${i.key}" data-source-type="organico">Simular Lead Orgânico</button>
-                <button class="btn btn-secondary btn-sm" data-action="integration-simulate" data-id="${i.key}" data-source-type="pago">Simular Lead Pago</button>
+              <button class="btn btn-secondary btn-sm" data-action="integration-test" data-id="${i.key}" ${i.status === 'connected' ? '' : 'disabled title="Disponível após conclusão da implantação"'}><i data-feather="activity"></i> Testar Conexão</button>
+              ${can('integracoes', 'edit') ? `
+                <button class="btn btn-secondary btn-sm" data-action="integration-simulate" data-id="${i.key}" data-source-type="organico" ${i.status === 'connected' ? '' : 'disabled title="Disponível após ativação da integração"'}>Simular Lead Orgânico</button>
+                <button class="btn btn-secondary btn-sm" data-action="integration-simulate" data-id="${i.key}" data-source-type="pago" ${i.status === 'connected' ? '' : 'disabled title="Disponível após ativação da integração"'}>Simular Lead Pago</button>
               ` : ''}
             </div>
           </div>
@@ -2030,7 +2045,7 @@
       { name: 'name', label: 'Nome completo', required: true, value: existingUser && existingUser.name }
     ];
     if (!existingUser) {
-      fields.push({ name: 'username', label: 'Usuário (login)', required: true, placeholder: 'ex: joao.souza' });
+      fields.push({ name: 'username', label: 'Usuário (login)', required: true, placeholder: 'ex: colaborador.admissoes' });
       fields.push({ name: 'password', label: 'Senha inicial', type: 'password', required: true, hint: 'Mínimo 6 caracteres.' });
     }
     fields.push({ name: 'roleId', label: 'Cargo', type: 'select', options: roleOptions, value: existingUser && existingUser.roleId });

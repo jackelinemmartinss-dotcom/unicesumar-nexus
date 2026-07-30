@@ -27,11 +27,11 @@ const INTEGRATION_LABELS = {
   site: 'Formulário do Site'
 };
 
-const SAMPLE_FIRST_NAMES = ['Mariana', 'Pedro', 'Isabela', 'Lucas', 'Fernanda', 'Bruno', 'Carolina', 'Diego', 'Sofia', 'Rodrigo', 'Aline', 'Felipe'];
-const SAMPLE_LAST_NAMES = ['Ferreira', 'Souza', 'Carvalho', 'Ribeiro', 'Barbosa', 'Nogueira', 'Teixeira', 'Correia', 'Pinto', 'Moura'];
-const SAMPLE_COURSES = ['Engenharia de Software', 'Medicina', 'Administração de Empresas', 'MBA em Inteligência Artificial e Data Science', 'Pedagogia'];
-const SAMPLE_MESSAGES_PAGO = ['Vi o anúncio de vocês, quero saber mais sobre bolsas!', 'Qual o valor da primeira parcela?', 'Ainda dá tempo de me inscrever essa semana?'];
-const SAMPLE_MESSAGES_ORGANICO = ['Uma amiga minha estuda aí, quero informações do curso.', 'Gostaria de saber a grade curricular completa.', 'Vocês têm aulas aos sábados?'];
+const SAMPLE_FIRST_NAMES = ['Mariana', 'Pedro', 'Isabela', 'Gabriel', 'Fernanda', 'Bruno', 'Carolina', 'Diego', 'Sofia', 'Rodrigo', 'Aline', 'Felipe'];
+const SAMPLE_LAST_NAMES = ['Ferreira', 'Souza', 'Carvalho', 'Ribeiro', 'Barbosa', 'Nogueira', 'Teixeira', 'Correia', 'Moura', 'Almeida'];
+const SAMPLE_COURSES = ['Engenharia de Software', 'Medicina e Ciências da Saúde', 'Administração de Empresas', 'MBA em Inteligência Artificial e Data Science', 'Pedagogia'];
+const SAMPLE_MESSAGES_PAGO = ['Gostaria de obter mais informações sobre o processo seletivo e programas de bolsas.', 'Qual é o valor da mensalidade e prazos de matrícula para o próximo semestre?', 'Solicito orientações sobre o vestibular agendado online.'];
+const SAMPLE_MESSAGES_ORGANICO = ['Gostaria de receber a matriz curricular completa do curso.', 'Solicito informações sobre validação de disciplinas anteriores.', 'Como funciona o acompanhamento dos mentores e tutores EAD?'];
 
 function serialize(i) {
   const meta = getMeta(i);

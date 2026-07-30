@@ -755,8 +755,15 @@ a { color: inherit; }
    ========================================================================== */
 .empty-state { text-align: center; padding: 60px 20px; color: var(--text-muted); }
 .empty-state i { width: 40px; height: 40px; margin-bottom: 12px; }
-.badge-connected { color: var(--accent-success); font-weight: 700; font-size: 0.75rem; }
-.badge-disconnected { color: var(--text-muted); font-weight: 700; font-size: 0.75rem; }
+.badge-status { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: var(--radius-full); font-size: 0.72rem; font-weight: 700; background: var(--bg-input); border: 1px solid var(--border-color); }
+.badge-connected { color: var(--accent-success); border-color: rgba(16, 185, 129, 0.3); background: rgba(16, 185, 129, 0.08); }
+.badge-in-setup { color: var(--accent-warning); border-color: rgba(245, 158, 11, 0.3); background: rgba(245, 158, 11, 0.08); }
+.badge-in-config { color: var(--uc-cyan-accent); border-color: rgba(0, 163, 224, 0.3); background: rgba(0, 163, 224, 0.08); }
+.badge-disconnected { color: var(--text-muted); border-color: var(--border-color); }
+.status-dot { display: inline-block; width: 6px; height: 6px; border-radius: 50%; }
+.status-dot.online { background-color: var(--accent-success); }
+.status-dot.warning { background-color: var(--accent-warning); }
+.status-dot.offline { background-color: var(--text-muted); }
 .section-divider { border: none; border-top: 1px solid var(--border-color); margin: 4px 0; }
 .text-sub { color: var(--text-sub); }
 .card-list-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 20px; }
